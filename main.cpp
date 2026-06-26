@@ -2,47 +2,53 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
-// Struct to handle our isolated app configurations
-struct AppConfig {
-    char instanceName[64] = "Default Launcher";
-    char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
-    char boostProfile[32] = "normal";
+#define MAX_APPS 50
+
+struct AppItem {
+    char name[128];
+    char path[256];
 };
 
-AppConfig currentConfig;
+AppItem instanceApps[MAX_APPS];
+AppItem globalStorageApps[MAX_APPS];
 
-// This local implementation prevents any undefined reference linker errors
-extern "C" void envSetNextLoad(const char* path, const char* argv) {
-    // In a native libnx environment, this hooks into Horizon OS's homebrew loader loop.
-    // By keeping it locally defined here, our standalone compiler remains completely happy.
-    (void)path;
-    (void)argv;
-}
+int instanceCount = 0;
+int globalCount = 0;
+int currentMenuSelection = 0;
+int activeTab = 0; // 0 = HOME (Launch Menu), 1 = TOOLS (Add Apps)
 
-void loadConfiguration() {
-    FILE* file = fopen("./config.ini", "r");
-    if (!file) return;
+const char* instanceFolder = "sdmc:/switch/Launcher-NX_Games/";
+const char* mainSwitchFolder = "sdmc:/switch/";
 
-    char line[512]; 
-    while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = 0; 
-        if (line[0] == ';' || line[0] == '#' || line[0] == '[') continue; 
+// Handover hook for the Switch homebrew environment
+extern "C" void envSetNextLoad(const char* path, const char* argv);
 
-        char* eq = strchr(line, '=');
-        if (eq) {
-            *eq = '\0';
-            char* key = line;
-            char* value = eq + 1;
+// Custom standalone initialization routine to bypass console panic loops
+extern "C" void startup(void) {}
 
-            if (strcmp(key, "name") == 0) strncpy(currentConfig.instanceName, value, sizeof(currentConfig.instanceName)-1);
-            if (strcmp(key, "target_boot_path") == 0) strncpy(currentConfig.targetNroPath, value, sizeof(currentConfig.targetNroPath)-1);
-            if (strcmp(key, "boost_profile") == 0) strncpy(currentConfig.boostProfile, value, sizeof(currentConfig.boostProfile)-1);
+// Scans an input folder directory for target files
+void scanFolder(const char* path, AppItem* list, int* count) {
+    *count = 0;
+    DIR* dir = opendir(path);
+    if (!dir) {
+        mkdir(path, 0777);
+        return;
+    }
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL && *count < MAX_APPS) {
+        char* ext = strrchr(entry->d_name, '.');
+        if (ext && strcmp(ext, ".nro") == 0) {
+            strncpy(list[*count].name, entry->d_name, sizeof(list[*count].name) - 1);
+            snprintf(list[*count].path, sizeof(list[*count].path), "%s%s", path, entry->d_name);
+            (*count)++;
         }
     }
-    fclose(file);
+    closedir(dir);
 }
 
+// Low-level function to copy binaries between directories
 bool copyFile(const char* src, const char* dest) {
     FILE* source = fopen(src, "rb");
     FILE* target = fopen(dest, "wb");
@@ -61,47 +67,108 @@ bool copyFile(const char* src, const char* dest) {
     return true;
 }
 
-void exportNewInstance(const char* currentAppPath, const char* newName, const char* targetNro, const char* speedProfile) {
-    char folderPath[512];
-    char nroDest[512];
-    char configDest[512];
+// Render the graphical Hekate-style elements
+void drawHekateInterface() {
+    // Clear display, force home cursor
+    printf("\x1b[2J\x1b[1;1H");
 
-    snprintf(folderPath, sizeof(folderPath), "sdmc:/switch/Launcher-NX_%s", newName);
-    snprintf(nroDest, sizeof(nroDest), "sdmc:/switch/Launcher-NX_%s/Launcher-NX_%s.nro", newName, newName);
-    snprintf(configDest, sizeof(configDest), "sdmc:/switch/Launcher-NX_%s/config.ini", newName);
+    // 1. TOP NAVIGATION BAR (Hekate Style)
+    printf("\x1b[1;36mlauncher-nx v1.0.0\x1b[0m   ");
+    if (activeTab == 0) {
+        printf("\x1b[1;7;32m [ HOME ] \x1b[0m   [ TOOLS ]    [ OPTIONS ]\n");
+    } else {
+        printf(" [ HOME ]   \x1b[1;7;32m [ TOOLS ] \x1b[0m   [ OPTIONS ]\n");
+    }
+    printf("-----------------------------------------------------------------\n");
 
-    mkdir(folderPath, 0777); 
+    // 2. CENTRAL WORKING CONTENT AREA
+    if (activeTab == 0) {
+        // HOME / BOOT MENU
+        printf("\n  \x1b[1;34mhekate-nx -> Launch Menu (Current Instance Apps)\x1b[0m\n");
+        printf("  Select a file from your folder instance block to initialize:\n\n");
 
-    if (copyFile(currentAppPath, nroDest)) { 
-        FILE* configFile = fopen(configDest, "w");
-        if (configFile) {
-            fprintf(configFile, "[InstanceSettings]\n");
-            fprintf(configFile, "name=%s\n", newName);
-            fprintf(configFile, "target_boot_path=%s\n", targetNro);
-            fprintf(configFile, "boost_profile=%s\n", speedProfile);
-            fclose(configFile);
-            printf("Successfully exported instance to %s\n", folderPath);
+        if (instanceCount == 0) {
+            printf("    [!] No target apps loaded in this instance yet.\n");
+            printf("        Navigate to [ TOOLS ] tab to add games to this folder.\n");
+        } else {
+            for (int i = 0; i < instanceCount; i++) {
+                if (i == currentMenuSelection) {
+                    // Draw a stylized dynamic cursor block pointer
+                    printf("    \x1b[1;32m> [ %d ]  %-30s  (Boot Ready)\x1b[0m\n", i + 1, instanceApps[i].name);
+                } else {
+                    printf("      [ %d ]  %-30s\n", i + 1, instanceApps[i].name);
+                }
+            }
+        }
+    } 
+    else if (activeTab == 1) {
+        // TOOLS / ADD GAMES MENU
+        printf("\n  \x1b[1;35mhekate-nx -> File Instance Management Tools\x1b[0m\n");
+        printf("  Select a global system app to add it into this instance folder:\n\n");
+
+        if (globalCount == 0) {
+            printf("    [!] No global .nro apps found inside your sdmc:/switch/ directory.\n");
+        } else {
+            for (int i = 0; i < globalCount; i++) {
+                if (i == currentMenuSelection) {
+                    printf("    \x1b[1;35m+ [ %d ]  %-30s  (Press to Add App)\x1b[0m\n", i + 1, globalStorageApps[i].name);
+                } else {
+                    printf("      [ %d ]  %-30s\n", i + 1, globalStorageApps[i].name);
+                }
+            }
         }
     }
+
+    // 3. BOTTOM STATUS INFORMATION BAR
+    printf("\n\x1b[22;1H-----------------------------------------------------------------\n");
+    printf(" \x1b[1;30mControls: (L/R) Change Tab | (U/D) Scroll | (A) Confirm | (+) Exit\x1b[0m\n");
+    printf(" \x1b[36mStatus: Sphaira Environment | Battery: 100%% | Temp: 35.5 C\x1b[0m\n");
 }
 
 int main(int argc, char **argv) {
-    // Clear screen console output commands
-    printf("\x1b[2J\x1b[1;1H"); 
-    loadConfiguration(); 
+    setvbuf(stdout, NULL, _IONBF, 0);
 
-    printf("=============================================\n");
-    printf(" LAUNCHER-NX INSTANCE: %s\n", currentConfig.instanceName);
-    printf(" CURRENT BOOT TARGET:  %s\n", currentConfig.targetNroPath);
-    printf(" BOOST STATE PROFILE:  %s\n", currentConfig.boostProfile);
-    printf("=============================================\n");
-    printf("Pressing (A) Launches Target | Pressing (X) Exports Instance\n");
+    // Initial population scans
+    scanFolder(instanceFolder, instanceApps, &instanceCount);
+    scanFolder(mainSwitchFolder, globalStorageApps, &globalCount);
 
-    // Execution Simulation Loop
-    if (access(currentConfig.targetNroPath, F_OK) == 0) {
-        envSetNextLoad(currentConfig.targetNroPath, currentConfig.targetNroPath);
-    } else {
-        exportNewInstance(argv[0], "RetroMenu", "sdmc:/switch/retroarch_switch.nro", "max_overclock");
+    // Mock interactive keyboard input variables for cross-platform simulation testing
+    // Change these parameters manually or plug in controller hooks as needed
+    int mockInputs[] = { 1, 2, 3 }; // Change tabs and selections for interface preview
+    int inputLength = sizeof(mockInputs) / sizeof(mockInputs[0]);
+
+    for (int step = 0; step <= inputLength; step++) {
+        drawHekateInterface();
+        
+        // Simulating logic execution steps
+        if (step == 0) {
+            // Step 0: User switches to the TOOLS Tab (activeTab = 1)
+            activeTab = 1;
+            currentMenuSelection = 0;
+        }
+        else if (step == 1 && globalCount > 0) {
+            // Step 1: User adds the first discovered global app into the instance directory
+            char destinationPath[512];
+            snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
+            copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
+            
+            // Re-sync directory changes
+            scanFolder(instanceFolder, instanceApps, &instanceCount);
+        }
+        else if (step == 2) {
+            // Step 2: User shifts back to the HOME Tab (activeTab = 0)
+            activeTab = 0;
+            currentMenuSelection = 0;
+        }
+        else if (step == 3 && instanceCount > 0) {
+            // Step 3: Boot execution layer triggers on the chosen item
+            if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
+                envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
+            }
+        }
+        
+        // Brief sleep pause to view screen layouts inside terminal logs comfortably
+        usleep(800000);
     }
 
     return 0;
