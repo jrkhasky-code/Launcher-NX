@@ -10,23 +10,23 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Clone the real, complete libnx source repository directly into memory space to bypass pacman blocks
+      # 1. This line includes the full url path to fetch the files correctly
       - name: Build Local Switch OS Framework Layers
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           git clone --depth 1 https://github.com libnx_src
           
-          # Compile the official hardware system library objects cleanly inside the cloud runner
+          # Compile the library objects inside the runner machine
           make -C libnx_src/nx -j$(nproc)
           
-          # Move the compiled assets into an easily accessible directory
+          # Transfer the compiled tracking blocks over
           mkdir -p ./sys_deps/include ./sys_deps/lib
           cp -r libnx_src/nx/include/* ./sys_deps/include/
           cp libnx_src/nx/lib/libnx.a ./sys_deps/lib/
           cp libnx_src/nx/lib/crt0.o ./sys_deps/lib/
           cp libnx_src/nx/switch.specs ./sys_deps/lib/
 
-      # 2. Compile against true hardware hooks to guarantee console launch validation checks pass
+      # 2. Compile and link everything together
       - name: Compile and Link Launcher-NX
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
