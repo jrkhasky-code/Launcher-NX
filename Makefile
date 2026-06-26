@@ -1,13 +1,10 @@
-# Force explicit paths for the cloud container
+# Force paths for the cloud container
 export DEVKITPRO  := /opt/devkitpro
 export DEVKITARM  := /opt/devkitpro/devkitARM
 export DEVKITA64  := /opt/devkitpro/devkitA64
 
-# Safely include the switch building rules 
-include $(DEVKITPRO)/libnx/switch_rules
-
-# Set configuration parameters
-TARGET      := SwitchLauncher
+# Set standard configuration parameters
+TARGET      := Launcher-NX
 BUILD       := build
 SOURCES     := source
 
@@ -16,5 +13,10 @@ APP_TITLE   := Custom Boot Menu
 APP_AUTHOR  := Homebrew Dev
 APP_VERSION := 1.0.0
 
-# Safely include compiling engine rules
+# Include standard template rules
+include $(DEVKITPRO)/libnx/switch_rules
+
+# Explicitly define the default "all" target so the compiler knows what to run
+all: $(OUTPUT).nro
+
 include $(DEVKITPRO)/devkitA64/base_rules
