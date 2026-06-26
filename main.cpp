@@ -4,14 +4,16 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+// Global structure to hold our current launcher instance configuration settings
 struct AppConfig {
     char instanceName[64] = "Default Launcher";
     char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
-    char boostProfile[64] = "normal";
+    char boostProfile[32] = "normal";
 };
 
 AppConfig currentConfig;
 
+// Reads text configs locally from the app's current directory
 void loadConfiguration() {
     FILE* file = fopen("./config.ini", "r");
     if (!file) return;
@@ -35,6 +37,7 @@ void loadConfiguration() {
     fclose(file);
 }
 
+// Low-level function to clone the binary stream safely
 bool copyFile(const char* src, const char* dest) {
     FILE* source = fopen(src, "rb");
     FILE* target = fopen(dest, "wb");
@@ -53,14 +56,15 @@ bool copyFile(const char* src, const char* dest) {
     return true;
 }
 
+// Clones this exact running binary and outputs a standalone target workspace configuration under Launcher-NX layout rules
 void exportNewInstance(const char* currentAppPath, const char* newName, const char* targetNro, const char* speedProfile) {
     char folderPath[256];
     char nroDest[256];
     char configDest[256];
 
-    snprintf(folderPath, sizeof(folderPath), "sdmc:/switch/Launcher_%s", newName);
-    snprintf(nroDest, sizeof(nroDest), "sdmc:/switch/Launcher_%s/Launcher_%s.nro", newName, newName);
-    snprintf(configDest, sizeof(configDest), "sdmc:/switch/Launcher_%s/config.ini", newName);
+    snprintf(folderPath, sizeof(folderPath), "sdmc:/switch/Launcher-NX_%s", newName);
+    snprintf(nroDest, sizeof(nroDest), "sdmc:/switch/Launcher-NX_%s/Launcher-NX_%s.nro", newName, newName);
+    snprintf(configDest, sizeof(configDest), "sdmc:/switch/Launcher-NX_%s/config.ini", newName);
 
     mkdir(folderPath, 0777); 
 
@@ -87,7 +91,7 @@ int main(int argc, char **argv) {
     padInitializeDefault(&pad);
 
     printf("\x1b[1;1H=============================================");
-    printf("\x1b[2;1H APPLICATION INSTANCE: %s", currentConfig.instanceName);
+    printf("\x1b[2;1H LAUNCHER-NX INSTANCE: %s", currentConfig.instanceName);
     printf("\x1b[3;1H CURRENT BOOT TARGET:  %s", currentConfig.targetNroPath);
     printf("\x1b[4;1H BOOST STATE PROFILE:  %s", currentConfig.boostProfile);
     printf("\x1b[5;1H=============================================");
@@ -121,7 +125,7 @@ int main(int argc, char **argv) {
             envSetNextLoad(currentConfig.targetNroPath, currentConfig.targetNroPath);
         } else {
             consoleInit(NULL);
-            printf("Error: Target path not found!\n%s\n", currentConfig.targetNroPath);
+            printf("Launcher-NX Error: Target path not found!\n%s\n", currentConfig.targetNroPath);
             printf("\nPress (+) to return to system.");
             while(appletMainLoop()) {
                 padUpdate(&pad);
