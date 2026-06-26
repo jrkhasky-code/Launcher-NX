@@ -10,26 +10,16 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Automatically invoke CMake to build the absolute fixed target ELF mappings
-      - name: Configure CMake Environment
+      # Forces the compiler to link statically as a unified object to bypass all machine representation errors
+      - name: Direct Compile and Link Launcher-NX
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
-          mkdir build
-          cd build
-          cmake ..
-
-      # 2. Run the native linker engine to output a protected binary structure
-      - name: Compile and Link Binaries
-        run: |
-          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
-          cd build
-          make
-
-      # 3. Use the official packaging utility to generate an authentic Switch executable
-      - name: Package Native Executable
-        run: |
-          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
-          elf2nro ./build/Launcher-NX ./Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
+          
+          # 1. Compile and link main.cpp cleanly into a static executable payload file
+          aarch64-none-elf-g++ -O2 -static -fPIE -pie -march=armv8-a+crc+crypto -mtune=cortex-a57 main.cpp -o Launcher-NX.elf
+          
+          # 2. Convert that raw payload directly into your clean executable Switch .nro format
+          elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
