@@ -10,37 +10,21 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      - name: Auto Generate Framework Makefile
+      - name: Compile and Link Launcher-NX
         run: |
-          # 1. Dynamically write out a pure Makefile that the platform container natively understands
-          cat << 'EOF' > Makefile
-          export DEVKITPRO  := /opt/devkitpro
-          export DEVKITARM  := /opt/devkitpro/devkitARM
-          export DEVKITA64  := /opt/devkitpro/devkitA64
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
+          
+          # 1. Compile source into an ARM64 object file
+          aarch64-none-elf-g++ -O2 -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
+          
+          # 2. Link object directly with the native crt0 startup environment mapping
+          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -fPIE -pie main.o $DEVKITPRO/libnx/lib/crt0.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
+          
+          # 3. Package everything into the final Switch app bundle
+          elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
-          include $(DEVKITPRO)/libnx/switch_rules
-
-          TARGET      := Launcher-NX
-          BUILD       := build
-          # Instruct the native building template to look directly in the flat root folder
-          SOURCES     := .
-          DATA        := data
-          INCLUDES    := include
-
-          APP_TITLE   := Launcher-NX
-          APP_AUTHOR  := Homebrew Dev
-          APP_VERSION := 1.0.0
-
-          include $(DEVKITPRO)/devkitA64/base_rules
-          EOF
-
-      - name: Compile via Native Architecture
-        run: |
-          # 2. Run standard, protected compilation rules
-          make
-
-      - name: Upload Launcher-NX Binary
+      - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
           name: Launcher-NX
-          path: ./*.nro
+          path: ./Launcher-NX.nro
