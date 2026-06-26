@@ -10,17 +10,24 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      - name: Compile and Link Launcher-NX
+      - name: Install Missing Switch SDK Libraries
         run: |
+          # Force sync and install the entire native Switch development ecosystem inside the cloud runner
+          dkp-pacman -Syy --noconfirm
+          dkp-pacman -S switch-dev --noconfirm
+
+      - name: Build via Switch Toolchain
+        run: |
+          # Use the official environment compiler directly to handle all relocation layout math safely
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # 1. Compile source into an ARM64 object file
-          aarch64-none-elf-g++ -O2 -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
+          # 1. Compile source with proper platform configurations
+          aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
           
-          # 2. Link object directly with the native crt0 startup environment mapping
-          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -fPIE -pie main.o $DEVKITPRO/libnx/lib/crt0.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
+          # 2. Link with correct specs and flags to clear the dynamic relocations error completely
+          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -g -march=armv8-a+crc+crypto -mtune=cortex-a57 -Wl,-Map,Launcher-NX.map -ftl-optimization -fPIE -pie main.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
           
-          # 3. Package everything into the final Switch app bundle
+          # 3. Create the final clean Switch executable format
           elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Launcher-NX
