@@ -17,8 +17,8 @@ jobs:
           # 1. Compile source into an ARM64 object file
           aarch64-none-elf-g++ -O2 -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
           
-          # 2. Link object to libnx
-          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -Wl,-z,text main.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
+          # 2. Link object to libnx (Added -pie and clarified text placement to fix the relocations error)
+          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -pie -Wl,-z,text main.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
           
           # 3. Package everything into the final Switch app bundle renamed to Launcher-NX
           elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
