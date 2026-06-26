@@ -1,4 +1,6 @@
-# Pull the standard building variables natively out of the secure container
+export DEVKITPRO  := /opt/devkitpro
+export DEVKITA64  := /opt/devkitpro/devkitA64
+
 include $(DEVKITPRO)/libnx/switch_rules
 
 TARGET      := Launcher-NX
