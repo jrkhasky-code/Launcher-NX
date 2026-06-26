@@ -11,8 +11,7 @@ jobs:
         uses: actions/checkout@v4
 
       # 1. Clone the real, complete libnx source repository directly into memory space to bypass pacman blocks
-      # Fixed: Added the correct absolute repository path 'switchbrew/libnx.git' to resolve the 128 download error
-      自由- name: Build Local Switch OS Framework Layers
+      - name: Build Local Switch OS Framework Layers
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           git clone --depth 1 https://github.com libnx_src
