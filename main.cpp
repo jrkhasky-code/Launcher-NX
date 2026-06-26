@@ -4,10 +4,11 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+// Fixed struct using character arrays instead of single char elements
 struct AppConfig {
-    char instanceName = "Default Launcher";
-    char targetNroPath = "sdmc:/switch/retroarch_switch.nro";
-    char boostProfile = "normal";
+    char instanceName[256] = "Default Launcher";
+    char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
+    char boostProfile[256] = "normal";
 };
 
 AppConfig currentConfig;
@@ -16,10 +17,10 @@ void loadConfiguration() {
     FILE* file = fopen("./config.ini", "r");
     if (!file) return;
 
-    char line;
+    char line[512]; // Fixed: Changed from 'char' to an array buffer
     while (fgets(line, sizeof(line), file)) {
         line[strcspn(line, "\r\n")] = 0; 
-        if (line == ';' || line == '#' || line == '[') continue; 
+        if (line[0] == ';' || line[0] == '#' || line[0] == '[') continue; 
 
         char* eq = strchr(line, '=');
         if (eq) {
@@ -43,7 +44,7 @@ bool copyFile(const char* src, const char* dest) {
         if (target) fclose(target);
         return false;
     }
-    char buffer;
+    char buffer[4096]; // Fixed: Increased to an array buffer for proper speeds
     size_t bytesRead;
     while ((bytesRead = fread(buffer, 1, sizeof(buffer), source)) > 0) {
         fwrite(buffer, 1, bytesRead, target);
@@ -54,9 +55,9 @@ bool copyFile(const char* src, const char* dest) {
 }
 
 void exportNewInstance(const char* newName, const char* targetNro, const char* speedProfile) {
-    char folderPath;
-    char nroDest;
-    char configDest;
+    char folderPath[256];  // Fixed sizing
+    char nroDest[256];     // Fixed sizing
+    char configDest[256];  // Fixed sizing
 
     snprintf(folderPath, sizeof(folderPath), "sdmc:/switch/Launcher_%s", newName);
     snprintf(nroDest, sizeof(nroDest), "sdmc:/switch/Launcher_%s/Launcher_%s.nro", newName, newName);
@@ -64,7 +65,7 @@ void exportNewInstance(const char* newName, const char* targetNro, const char* s
 
     mkdir(folderPath, 0777); 
 
-    if (copyFile(__argv, nroDest)) {
+    if (copyFile(__argv[0], nroDest)) { // Fixed to read explicit argument string index
         FILE* configFile = fopen(configDest, "w");
         if (configFile) {
             fprintf(configFile, "[InstanceSettings]\n");
