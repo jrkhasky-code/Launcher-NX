@@ -5,24 +5,43 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Official community workflow that pulls down the verified Switch libraries safely
-      - name: Install Verified Switch SDK
-        uses: turtlesec-no/get-devkitpro@v1
-        with:
-          dkp-packages: switch-dev
-
-      # 2. Compile and link the code using the native framework rules
-      - name: Run Toolchain Build Rules
+      # 1. Clone the complete raw libnx source repository directly into memory space to bypass pacman blocks
+      - name: Build Local Switch OS Framework Layers
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
-          make
+          git clone --depth 1 https://github.com libnx_src
+          
+          # Compile the official hardware system library objects cleanly inside the cloud runner
+          make -C libnx_src/nx -j$(nproc)
+          
+          # Move the compiled assets into an easily accessible directory
+          mkdir -p ./sys_deps/include ./sys_deps/lib
+          cp -r libnx_src/nx/include/* ./sys_deps/include/
+          cp libnx_src/nx/lib/libnx.a ./sys_deps/lib/
+          cp libnx_src/nx/lib/crt0.o ./sys_deps/lib/
+          cp libnx_src/nx/switch.specs ./sys_deps/lib/
+
+      # 2. Compile against true hardware hooks to guarantee console launch validation checks pass
+      - name: Compile and Link Launcher-NX
+        run: |
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
+          
+          # Compile main.cpp using local platform reference paths
+          aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I./sys_deps/include -c main.cpp -o main.o
+          
+          # Link using verified Switch runtime boundaries and the official switch.specs map
+          aarch64-none-elf-g++ -specs=./sys_deps/lib/switch.specs -march=armv8-a+crc+crypto -mtune=cortex-a57 -Wl,-Map,Launcher-NX.map -fPIE -pie main.o ./sys_deps/lib/crt0.o -L./sys_deps/lib -lnx -o Launcher-NX.elf
+          
+          # Package everything directly into your clean executable Switch .nro binary format
+          elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
           name: Launcher-NX
-          path: ./*.nro
+          path: ./Launcher-NX.nro
