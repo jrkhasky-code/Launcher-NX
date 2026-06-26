@@ -10,12 +10,11 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Generates a custom memory layout map to trick elf2nro into validating our standalone binary
       - name: Compile and Link Launcher-NX
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # 1. Generate the exact 3 loadable segments and BSS mapping layout rules
+          # 1. Define custom layout boundaries including internal BSS tracking symbols
           cat << 'EOF' > switch.ld
           PHDRS {
             text PT_LOAD FLAGS(5);
@@ -29,14 +28,19 @@ jobs:
             .rodata : { *(.rodata*) } :rodata
             . = ALIGN(0x1000);
             .data : { *(.data*) } :data
+            
+            . = ALIGN(0x1000);
+            __bss_start__ = .;
             .bss : { *(.bss*) *(COMMON) } :data
+            __bss_end__ = .;
+            __end__ = .;
           }
           EOF
           
           # 2. Compile source into an ARM64 object file
           aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -c main.cpp -o main.o
           
-          # 3. Link using our custom segment layout file to satisfy the phdr and bss verification blocks
+          # 3. Link using our complete custom segment layout file to satisfy the phdr and symbol verification blocks
           aarch64-none-elf-g++ -shared -fPIE -pie -T switch.ld main.o -o Launcher-NX.elf
           
           # 4. Package the tailored binary directly into your clean executable Switch .nro file format
