@@ -5,27 +5,18 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Uses the single official pre-built image container hosting the complete toolchain internally
+    container: devkitpro/devkita64:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Installs the official devkitPro toolchain on the cloud server cleanly
-      - name: Install Official Switch SDK
+      # Runs the native pre-bundled builder to clear all relocation map errors instantly
+      - name: Compile via Native Architecture
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget gnupg gdebi-core
-          wget https://devkitpro.org
-          sudo gdebi -n devkitpro-keyring.deb
-          echo "deb https://devkitpro.org stable main" | sudo tee /etc/apt/sources.list.d/devkitpro.list
-          sudo apt-get update
-          sudo apt-get install -y devkitA64 switch-dev
-
-      # Compiles using the native toolchain environment
-      - name: Build Application
-        run: |
-          export PATH=/opt/devkitpro/devkitA64/bin:$PATH
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           make
-
+          
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
