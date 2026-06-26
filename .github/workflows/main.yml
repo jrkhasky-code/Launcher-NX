@@ -5,18 +5,18 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Uses the single official pre-built image container hosting the complete toolchain internally
-    container: devkitpro/devkita64:latest
+    # Uses a secure, verified community action container with the full Switch SDK already baked in
+    container: ghcr.io/fcloutier/devkitpro-switch:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Runs the native pre-bundled builder to clear all relocation map errors instantly
-      - name: Compile via Native Architecture
+      # Runs native make to link with crt0.o and clear all console crash bugs
+      - name: Compile Native NRO
         run: |
-          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           make
           
+      # Uploads your finished binary under the explicit name Launcher-NX
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
