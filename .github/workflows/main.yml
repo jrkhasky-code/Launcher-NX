@@ -9,18 +9,22 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Installs devkitpro cleanly using official network infrastructure
+      # 1. Official modern devkitPro installation method via their script pipeline
       - name: Install devkitPro Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gdebi-core wget
-          wget https://devkitpro.org
-          sudo gdebi -n devkitpro-keyring.deb
-          echo "deb [signed-by=/usr/share/keyrings/devkitpro-keyring.gpg] https://devkitpro.org stable main" | sudo tee /etc/apt/sources.list.d/devkitpro.list
-          sudo apt-get update
-          sudo apt-get install -y devkitA64 switch-dev
+          sudo apt-get install -y pacman-package-manager wget gdebi-core
+          
+          # Download and execute the official installer script
+          wget https://apt.devkitpro.org/install-devkitpro-pacman
+          chmod +x ./install-devkitpro-pacman
+          sudo ./install-devkitpro-pacman --noconfirm
+          
+          # Force sync and install the entire Switch dev ecosystem
+          sudo /opt/devkitpro/pacman/bin/pacman -Syy --noconfirm
+          sudo /opt/devkitpro/pacman/bin/pacman -S switch-dev --noconfirm
 
-      # Generates a fresh, official Makefile on the fly to process all architecture layouts safely
+      # 2. Generates a clean, platform-native Makefile mapping variables safely
       - name: Generate Official Build Manifest
         run: |
           cat << 'EOF' > Makefile
@@ -41,9 +45,10 @@ jobs:
           include $(DEVKITPRO)/devkitA64/base_rules
           EOF
 
-      # Runs native make to link with crt0.o and clear relocation errors forever
+      # 3. Runs native make to link with crt0.o and clear all console crash bugs
       - name: Run Protected Compilation Rules
         run: |
+          export PATH=/opt/devkitpro/devkitA64/bin:$PATH
           make
 
       - name: Upload Launcher-NX
