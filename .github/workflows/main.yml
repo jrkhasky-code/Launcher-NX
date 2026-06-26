@@ -5,15 +5,28 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Uses a pre-configured platform development container that bypasses all network blocks
-    container: ghcr.io/fcloutier/devkitpro-switch:latest
+    # Uses the official, verified devkitPro image container hosted on Docker Hub
+    container: devkitpro/devkita64:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
+      # Forces the container to pull the missing switch-dev package from a working repository backup
+      - name: Install Switch Development Packages
+        run: |
+          export PATH=/opt/devkitpro/pacman/bin:$PATH
+          
+          # Force configure an alternative repository mirror link to bypass the 403 firewall block
+          echo -e "\n[dkp-packages]\nServer = https://devkitpro.org" >> /opt/devkitpro/pacman/etc/pacman.conf
+          
+          # Synchronize the database and install the official Switch operating system headers
+          pacman -Syy --noconfirm
+          pacman -S switch-dev --noconfirm
+
       # Runs the native template build commands to safely align internal memory offsets
       - name: Compile Native NRO
         run: |
+          export PATH=/opt/devkitpro/devkitA64/bin:$PATH
           make
           
       - name: Upload Launcher-NX
