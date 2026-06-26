@@ -10,47 +10,26 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Generates a valid homebrew NRO layout by building real asset headers into the final payload
-      - name: Compile and Link Launcher-NX
+      # 1. Automatically invoke CMake to build the absolute fixed target ELF mappings
+      - name: Configure CMake Environment
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
-          
-          # 1. Setup the exact 3 loadable segments and BSS mapping layout rules
-          cat << 'EOF' > switch.ld
-          PHDRS {
-            text PT_LOAD FLAGS(5);
-            rodata PT_LOAD FLAGS(4);
-            data PT_LOAD FLAGS(6);
-          }
-          SECTIONS {
-            . = 0x80000000;
-            .text : { *(.text*) } :text
-            . = ALIGN(0x1000);
-            .rodata : { *(.rodata*) } :rodata
-            . = ALIGN(0x1000);
-            .data : { *(.data*) } :data
-            
-            . = ALIGN(0x1000);
-            __bss_start__ = .;
-            .bss : { *(.bss*) *(COMMON) } :data
-            __bss_end__ = .;
-            __end__ = .;
-          }
-          EOF
-          
-          # 2. Compile source into an ARM64 object file
-          aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -c main.cpp -o main.o
-          
-          # 3. Link using our complete custom segment layout file to satisfy the phdr and symbol verification blocks
-          aarch64-none-elf-g++ -shared -fPIE -pie -T switch.ld main.o -o Launcher-NX.elf
-          
-          # 4. CRITICAL CRASH FIX: Inject a valid Homebrew header structure directly onto the binary payload
-          # This forces elf2nro to align the executable space so Atmosphere won't panic on launch.
-          elf2nro Launcher-NX.elf raw_launcher.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
-          
-          # Stitch an authenticated 16-byte magic token jump point block to pass the OS kernel security checks
-          printf '\x00\x00\x00\x00\x10\x00\x00\x00NRO0\x00\x00\x00\x00' > header.bin
-          cat header.bin raw_launcher.nro > Launcher-NX.nro
+          mkdir build
+          cd build
+          cmake ..
+
+      # 2. Run the native linker engine to output a protected binary structure
+      - name: Compile and Link Binaries
+        run: |
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
+          cd build
+          make
+
+      # 3. Use the official packaging utility to generate an authentic Switch executable
+      - name: Package Native Executable
+        run: |
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
+          elf2nro ./build/Launcher-NX ./Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
