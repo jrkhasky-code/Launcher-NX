@@ -1,3 +1,4 @@
+#include <switch.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,17 +22,6 @@ int activeTab = 0;
 
 const char* instanceFolder = "sdmc:/switch/Launcher-NX_Games/";
 const char* mainSwitchFolder = "sdmc:/switch/";
-
-// CRITICAL LINKER FIX: Force the compiler to keep this stub in the final binary
-// even under aggressive -O2 compilation optimizations.
-extern "C" __attribute__((used)) void envSetNextLoad(const char* path, const char* argv) {
-    // Local mock environment wrapper to clear missing symbol definitions
-    (void)path;
-    (void)argv;
-}
-
-// Standalone initialization routine to override platform defaults
-extern "C" __attribute__((used)) void startup(void) {}
 
 void scanFolder(const char* path, AppItem* list, int* count) {
     *count = 0;
@@ -121,39 +111,63 @@ void drawHekateInterface() {
 }
 
 int main(int argc, char **argv) {
+    consoleInit(NULL); // Official safe UI rendering pipeline initialization
     setvbuf(stdout, NULL, _IONBF, 0);
 
     scanFolder(instanceFolder, instanceApps, &instanceCount);
     scanFolder(mainSwitchFolder, globalStorageApps, &globalCount);
 
-    int mockInputs[] = { 1, 2, 3 }; 
-    int inputLength = sizeof(mockInputs) / sizeof(mockInputs[0]);
+    PadState pad;
+    padInitializeDefault(&pad);
 
-    for (int step = 0; step <= inputLength; step++) {
-        drawHekateInterface();
-        
-        if (step == 0) {
-            activeTab = 1;
+    while(appletMainLoop()) {
+        padUpdate(&pad);
+        u64 kDown = padGetButtonsDown(&pad);
+
+        if (kDown & HidNpadButton_Plus) break; 
+
+        // Press L or R to swap tabs
+        if ((kDown & HidNpadButton_L) || (kDown & HidNpadButton_R)) {
+            activeTab = (activeTab == 0) ? 1 : 0;
             currentMenuSelection = 0;
         }
-        else if (step == 1 && globalCount > 0) {
-            char destinationPath[512];
-            snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
-            copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
-            scanFolder(instanceFolder, instanceApps, &instanceCount);
+
+        // Press Down to scroll down
+        if (kDown & HidNpadButton_Down) {
+            currentMenuSelection++;
+            int max = (activeTab == 0) ? instanceCount : globalCount;
+            if (currentMenuSelection >= max) currentMenuSelection = 0;
         }
-        else if (step == 2) {
-            activeTab = 0;
-            currentMenuSelection = 0;
-        }
-        else if (step == 3 && instanceCount > 0) {
-            if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
-                envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
+
+        // Press Up to scroll up
+        if (kDown & HidNpadButton_Up) {
+            currentMenuSelection--;
+            if (currentMenuSelection < 0) {
+                int max = (activeTab == 0) ? instanceCount : globalCount;
+                currentMenuSelection = max - 1;
             }
         }
-        
-        usleep(100000);
+
+        // Press A to confirm actions
+        if (kDown & HidNpadButton_A) {
+            if (activeTab == 0 && instanceCount > 0) {
+                if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
+                    envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
+                    break;
+                }
+            }
+            else if (activeTab == 1 && globalCount > 0) {
+                char destinationPath[1024];
+                snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
+                copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
+                scanFolder(instanceFolder, instanceApps, &instanceCount);
+            }
+        }
+
+        drawHekateInterface();
+        consoleUpdate(NULL); 
     }
 
+    consoleExit(NULL);
     return 0;
 }
