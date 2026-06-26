@@ -1,21 +1,9 @@
+#include <switch.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
-
-// Explicit hardware mappings matching the compiled libnx framework
-extern "C" {
-    void envSetNextLoad(const char* path, const char* argv);
-    struct PadState { uint32_t dummy[16]; };
-    void padInitializeDefault(struct PadState* pad);
-    void padUpdate(struct PadState* pad);
-    uint64_t padGetButtonsDown(struct PadState* pad);
-    bool appletMainLoop(void);
-    void consoleInit(void* window);
-    void consoleUpdate(void* window);
-    void consoleExit(void* window);
-}
 
 #define MAX_APPS 50
 
@@ -120,7 +108,7 @@ void drawHekateInterface() {
 }
 
 int main(int argc, char **argv) {
-    consoleInit(NULL); 
+    consoleInit(NULL); // Native safe UI rendering window initialization
     setvbuf(stdout, NULL, _IONBF, 0);
 
     scanFolder(instanceFolder, instanceApps, &instanceCount);
@@ -133,20 +121,20 @@ int main(int argc, char **argv) {
         padUpdate(&pad);
         uint64_t kDown = padGetButtonsDown(&pad);
 
-        if (kDown & 0x400) break; // (+) Button Exit Flag
+        if (kDown & HidNpadButton_Plus) break;
 
-        if ((kDown & 0x40) || (kDown & 0x80)) { // L / R Tab Swap Flags
+        if ((kDown & HidNpadButton_L) || (kDown & HidNpadButton_R)) {
             activeTab = (activeTab == 0) ? 1 : 0;
             currentMenuSelection = 0;
         }
 
-        if (kDown & 0x2) { // Down D-Pad Flag
+        if (kDown & HidNpadButton_Down) {
             currentMenuSelection++;
             int max = (activeTab == 0) ? instanceCount : globalCount;
             if (currentMenuSelection >= max) currentMenuSelection = 0;
         }
 
-        if (kDown & 0x1) { // Up D-Pad Flag
+        if (kDown & HidNpadButton_Up) {
             currentMenuSelection--;
             if (currentMenuSelection < 0) {
                 int max = (activeTab == 0) ? instanceCount : globalCount;
@@ -154,7 +142,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (kDown & 0x08) { // (A) Confirm Button Flag
+        if (kDown & HidNpadButton_A) {
             if (activeTab == 0 && instanceCount > 0) {
                 if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
                     envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
