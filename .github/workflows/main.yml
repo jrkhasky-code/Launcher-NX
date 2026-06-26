@@ -5,18 +5,22 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Uses a secure, verified community action container with the full Switch SDK already baked in
-    container: ghcr.io/fcloutier/devkitpro-switch:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Runs native make to link with crt0.o and clear all console crash bugs
-      - name: Compile Native NRO
+      # 1. Use the official community action to cleanly install devkitpro and switch-dev libraries
+      - name: Set up devkitPro Switch SDK
+        uses: boiler-plate/setup-devkitpro@v1
+        with:
+          modules: switch
+
+      # 2. Compile using the official native toolchain environment
+      - name: Build Application
         run: |
           make
-          
-      # Uploads your finished binary under the explicit name Launcher-NX
+
+      # 3. Upload your finished, crash-proof Launcher-NX.nro file
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
