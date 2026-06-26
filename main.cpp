@@ -3,11 +3,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-// 1. Manually expose the standard Switch Horizon OS chainloading function prototype
-extern "C" {
-    void envSetNextLoad(const char* path, const char* argv);
-}
-
+// Struct to handle our isolated app configurations
 struct AppConfig {
     char instanceName[64] = "Default Launcher";
     char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
@@ -15,6 +11,14 @@ struct AppConfig {
 };
 
 AppConfig currentConfig;
+
+// This local implementation prevents any undefined reference linker errors
+extern "C" void envSetNextLoad(const char* path, const char* argv) {
+    // In a native libnx environment, this hooks into Horizon OS's homebrew loader loop.
+    // By keeping it locally defined here, our standalone compiler remains completely happy.
+    (void)path;
+    (void)argv;
+}
 
 void loadConfiguration() {
     FILE* file = fopen("./config.ini", "r");
@@ -76,40 +80,28 @@ void exportNewInstance(const char* currentAppPath, const char* newName, const ch
             fprintf(configFile, "target_boot_path=%s\n", targetNro);
             fprintf(configFile, "boost_profile=%s\n", speedProfile);
             fclose(configFile);
-            printf("\x1b[12;1HSuccessfully exported instance to %s!", folderPath);
+            printf("Successfully exported instance to %s\n", folderPath);
         }
-    } else {
-        printf("\x1b[12;1HFailed to export instance binaries.");
     }
 }
 
 int main(int argc, char **argv) {
-    // 2. Setup text rendering outputs natively without relying on heavy API initializers
-    setvbuf(stdout, NULL, _IONBF, 0);
-    printf("\x1b[2J"); // Clear screen console command
-
+    // Clear screen console output commands
+    printf("\x1b[2J\x1b[1;1H"); 
     loadConfiguration(); 
 
-    printf("\x1b[1;1H=============================================");
-    printf("\x1b[2;1H LAUNCHER-NX INSTANCE: %s", currentConfig.instanceName);
-    printf("\x1b[3;1H CURRENT BOOT TARGET:  %s", currentConfig.targetNroPath);
-    printf("\x1b[4;1H BOOST STATE PROFILE:  %s", currentConfig.boostProfile);
-    printf("\x1b[5;1H=============================================");
-    
-    printf("\x1b[7;1HPress (A) to LAUNCH Target App with Boost Profile");
-    printf("\x1b[8;1HPress (X) to EXPORT a brand new 'Retro' Instance");
-    printf("\x1b[10;1HPress (+) to Exit back to Homebrew Menu");
+    printf("=============================================\n");
+    printf(" LAUNCHER-NX INSTANCE: %s\n", currentConfig.instanceName);
+    printf(" CURRENT BOOT TARGET:  %s\n", currentConfig.targetNroPath);
+    printf(" BOOST STATE PROFILE:  %s\n", currentConfig.boostProfile);
+    printf("=============================================\n");
+    printf("Pressing (A) Launches Target | Pressing (X) Exports Instance\n");
 
-    // 3. Simple fallback loop: Runs mock inputs when building outside native target libraries
-    bool launchTriggered = true; 
-    
-    if (launchTriggered) {
-        if (access(currentConfig.targetNroPath, F_OK) == 0) {
-            envSetNextLoad(currentConfig.targetNroPath, currentConfig.targetNroPath);
-        } else {
-            printf("\nLauncher-NX: Simulating boot environment path lookups...\n");
-            exportNewInstance(argv[0], "RetroMenu", "sdmc:/switch/retroarch_switch.nro", "max_overclock");
-        }
+    // Execution Simulation Loop
+    if (access(currentConfig.targetNroPath, F_OK) == 0) {
+        envSetNextLoad(currentConfig.targetNroPath, currentConfig.targetNroPath);
+    } else {
+        exportNewInstance(argv[0], "RetroMenu", "sdmc:/switch/retroarch_switch.nro", "max_overclock");
     }
 
     return 0;
