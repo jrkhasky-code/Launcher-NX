@@ -108,7 +108,7 @@ void drawHekateInterface() {
 }
 
 int main(int argc, char **argv) {
-    consoleInit(NULL); // Official safe UI rendering pipeline initialization
+    consoleInit(NULL); 
     setvbuf(stdout, NULL, _IONBF, 0);
 
     scanFolder(instanceFolder, instanceApps, &instanceCount);
@@ -124,32 +124,32 @@ int main(int argc, char **argv) {
         if (kDown & HidNpadButton_Plus) break;
 
         if ((kDown & HidNpadButton_L) || (kDown & HidNpadButton_R)) {
-            active_tab = (active_tab == 0) ? 1 : 0;
+            activeTab = (activeTab == 0) ? 1 : 0;
             currentMenuSelection = 0;
         }
 
         if (kDown & HidNpadButton_Down) {
             currentMenuSelection++;
-            int max = (active_tab == 0) ? instanceCount : globalCount;
+            int max = (activeTab == 0) ? instanceCount : globalCount;
             if (currentMenuSelection >= max) currentMenuSelection = 0;
         }
 
         if (kDown & HidNpadButton_Up) {
             currentMenuSelection--;
             if (currentMenuSelection < 0) {
-                int max = (active_tab == 0) ? instanceCount : globalCount;
+                int max = (activeTab == 0) ? instanceCount : globalCount;
                 currentMenuSelection = max - 1;
             }
         }
 
         if (kDown & HidNpadButton_A) {
-            if (active_tab == 0 && instanceCount > 0) {
+            if (activeTab == 0 && instanceCount > 0) {
                 if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
                     envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
                     break;
                 }
             }
-            else if (active_tab == 1 && globalCount > 0) {
+            else if (activeTab == 1 && globalCount > 0) {
                 char destinationPath[512];
                 snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
                 copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
