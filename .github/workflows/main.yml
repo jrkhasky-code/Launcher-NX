@@ -9,18 +9,30 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Use the official community action to cleanly install devkitpro and switch-dev libraries
-      - name: Set up devkitPro Switch SDK
-        uses: boiler-plate/setup-devkitpro@v1
-        with:
-          modules: switch
+      # 1. Download official devkitpro apt repositories directly from their primary source mirrors
+      - name: Install Official devkitPro Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg gdebi-core
+          
+          # Pull and install the verified devkitPro archive keys
+          wget https://devkitpro.org
+          sudo gdebi -n devkitpro-keyring.deb
+          
+          # Add the verified repository path to the system sources list
+          echo "deb https://devkitpro.org stable main" | sudo tee /etc/apt/sources.list.d/devkitpro.list
+          sudo apt-get update
+          
+          # Install the explicit standalone compilers and switch execution system vectors
+          sudo apt-get install -y devkitA64 switch-dev
 
-      # 2. Compile using the official native toolchain environment
+      # 2. Compile using the official system path variables
       - name: Build Application
         run: |
+          export PATH=/opt/devkitpro/devkitA64/bin:$PATH
           make
 
-      # 3. Upload your finished, crash-proof Launcher-NX.nro file
+      # 3. Deliver your completed, stable Launcher-NX file bundle
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
