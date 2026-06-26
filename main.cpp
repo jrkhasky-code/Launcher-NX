@@ -4,7 +4,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-// Global structure to hold our current launcher instance configuration settings
+// CRITICAL FIX: Explicitly set the homebrew applet type for the linker map
+u32 __nx_applet_type = AppletType_Default;
+
 struct AppConfig {
     char instanceName[64] = "Default Launcher";
     char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
@@ -13,12 +15,11 @@ struct AppConfig {
 
 AppConfig currentConfig;
 
-// Reads text configs locally from the app's current directory
 void loadConfiguration() {
     FILE* file = fopen("./config.ini", "r");
     if (!file) return;
 
-    char line[256]; 
+    char line[512]; 
     while (fgets(line, sizeof(line), file)) {
         line[strcspn(line, "\r\n")] = 0; 
         if (line[0] == ';' || line[0] == '#' || line[0] == '[') continue; 
@@ -37,7 +38,6 @@ void loadConfiguration() {
     fclose(file);
 }
 
-// Low-level function to clone the binary stream safely
 bool copyFile(const char* src, const char* dest) {
     FILE* source = fopen(src, "rb");
     FILE* target = fopen(dest, "wb");
@@ -56,7 +56,6 @@ bool copyFile(const char* src, const char* dest) {
     return true;
 }
 
-// Clones this exact running binary and outputs a standalone target workspace configuration under Launcher-NX layout rules
 void exportNewInstance(const char* currentAppPath, const char* newName, const char* targetNro, const char* speedProfile) {
     char folderPath[256];
     char nroDest[256];
