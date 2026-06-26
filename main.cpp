@@ -1,143 +1,30 @@
-#include <switch.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
+name: Build Switch Homebrew
 
-// Global structure to hold our current launcher instance configuration settings
-struct AppConfig {
-    char instanceName[64] = "Default Launcher";
-    char targetNroPath[256] = "sdmc:/switch/retroarch_switch.nro";
-    char boostProfile[32] = "normal";
-};
+on: [push, pull_request]
 
-AppConfig currentConfig;
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
 
-// Reads text configs locally from the app's current directory
-void loadConfiguration() {
-    FILE* file = fopen("./config.ini", "r");
-    if (!file) return;
+      - name: Force Custom Direct Compile
+        run: |
+          export PATH=$DEVKITPRO/devkitA64/bin:$PATH
+          
+          # 1. Compile source into an ARM64 object file
+          aarch64-none-elf-g++ -O2 -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
+          
+          # 2. Link object to libnx (Added the -z text flag here to fix the relocation error)
+          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -Wl,-z,text main.o -L$DEVKITPRO/libnx/lib -lnx -o SwitchLauncher.elf
+          
+          # 3. Package everything into the final Switch app bundle
+          elf2nro SwitchLauncher.elf SwitchLauncher.nro --title="Custom Boot Menu" --author="Homebrew Dev" --version="1.0.0"
 
-    char line[512]; 
-    while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = 0; 
-        if (line[0] == ';' || line[0] == '#' || line[0] == '[') continue; 
-
-        char* eq = strchr(line, '=');
-        if (eq) {
-            *eq = '\0';
-            char* key = line;
-            char* value = eq + 1;
-
-            if (strcmp(key, "name") == 0) strncpy(currentConfig.instanceName, value, sizeof(currentConfig.instanceName)-1);
-            if (strcmp(key, "target_boot_path") == 0) strncpy(currentConfig.targetNroPath, value, sizeof(currentConfig.targetNroPath)-1);
-            if (strcmp(key, "boost_profile") == 0) strncpy(currentConfig.boostProfile, value, sizeof(currentConfig.boostProfile)-1);
-        }
-    }
-    fclose(file);
-}
-
-// Low-level function to clone the binary stream safely
-bool copyFile(const char* src, const char* dest) {
-    FILE* source = fopen(src, "rb");
-    FILE* target = fopen(dest, "wb");
-    if (!source || !target) {
-        if (source) fclose(source);
-        if (target) fclose(target);
-        return false;
-    }
-    char buffer[4096]; 
-    size_t bytesRead;
-    while ((bytesRead = fread(buffer, 1, sizeof(buffer), source)) > 0) {
-        fwrite(buffer, 1, bytesRead, target);
-    }
-    fclose(source);
-    fclose(target);
-    return true;
-}
-
-// Clones this exact running binary and outputs a standalone target workspace configuration
-void exportNewInstance(const char* currentAppPath, const char* newName, const char* targetNro, const char* speedProfile) {
-    char folderPath[512];
-    char nroDest[512];
-    char configDest[512];
-
-    snprintf(folderPath, sizeof(folderPath), "sdmc:/switch/Launcher_%s", newName);
-    snprintf(nroDest, sizeof(nroDest), "sdmc:/switch/Launcher_%s/Launcher_%s.nro", newName, newName);
-    snprintf(configDest, sizeof(configDest), "sdmc:/switch/Launcher_%s/config.ini", newName);
-
-    mkdir(folderPath, 0777); 
-
-    if (copyFile(currentAppPath, nroDest)) { 
-        FILE* configFile = fopen(configDest, "w");
-        if (configFile) {
-            fprintf(configFile, "[InstanceSettings]\n");
-            fprintf(configFile, "name=%s\n", newName);
-            fprintf(configFile, "target_boot_path=%s\n", targetNro);
-            fprintf(configFile, "boost_profile=%s\n", speedProfile);
-            fclose(configFile);
-            printf("\x1b[12;1HSuccessfully exported instance to %s!", folderPath);
-        }
-    } else {
-        printf("\x1b[12;1HFailed to export instance binaries.");
-    }
-}
-
-int main(int argc, char **argv) {
-    consoleInit(NULL); 
-    loadConfiguration(); 
-
-    // Initialize modern Pad API input system for standard controllers
-    PadState pad;
-    padInitializeDefault(&pad);
-
-    printf("\x1b[1;1H=============================================");
-    printf("\x1b[2;1H APPLICATION INSTANCE: %s", currentConfig.instanceName);
-    printf("\x1b[3;1H CURRENT BOOT TARGET:  %s", currentConfig.targetNroPath);
-    printf("\x1b[4;1H BOOST STATE PROFILE:  %s", currentConfig.boostProfile);
-    printf("\x1b[5;1H=============================================");
-    
-    printf("\x1b[7;1HPress (A) to LAUNCH Target App with Boost Profile");
-    printf("\x1b[8;1HPress (X) to EXPORT a brand new 'Retro' Instance");
-    printf("\x1b[10;1HPress (+) to Exit back to Homebrew Menu");
-
-    bool launchTriggered = false;
-
-    while(appletMainLoop()) {
-        // Modern Pad API frame step updates
-        padUpdate(&pad);
-        u64 kDown = padGetButtonsDown(&pad);
-
-        if (kDown & HidNpadButton_Plus) break; 
-
-        if (kDown & HidNpadButton_A) {
-            launchTriggered = true; 
-            break; 
-        }
-
-        if (kDown & HidNpadButton_X) {
-            // Safely pass the running program path argument (argv[0]) into the cloning algorithm
-            exportNewInstance(argv[0], "RetroMenu", "sdmc:/switch/retroarch_switch.nro", "max_overclock");
-        }
-
-        consoleUpdate(NULL); 
-    }
-
-    if (launchTriggered) {
-        if (access(currentConfig.targetNroPath, F_OK) == 0) {
-            envSetNextLoad(currentConfig.targetNroPath, currentConfig.targetNroPath);
-        } else {
-            consoleInit(NULL);
-            printf("Error: Target path not found!\n%s\n", currentConfig.targetNroPath);
-            printf("\nPress (+) to return to system.");
-            while(appletMainLoop()) {
-                padUpdate(&pad);
-                if (padGetButtonsDown(&pad) & HidNpadButton_Plus) break;
-                consoleUpdate(NULL);
-            }
-        }
-    }
-
-    consoleExit(NULL);
-    return 0;
-}
+      - name: Upload Compiled NRO Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: Launcher-NX
+          path: ./*.nro
