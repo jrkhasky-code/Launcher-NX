@@ -1,11 +1,9 @@
-export DEVKITPRO  := /opt/devkitpro
-export DEVKITA64  := /opt/devkitpro/devkitA64
-
+# Pull the standard building rules natively from the safe host container environment
 include $(DEVKITPRO)/libnx/switch_rules
 
 TARGET      := Launcher-NX
 BUILD       := build
-SOURCES     := .
+SOURCES     := source
 
 APP_TITLE   := Launcher-NX
 APP_AUTHOR  := Homebrew Dev
