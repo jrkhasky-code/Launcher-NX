@@ -12,20 +12,19 @@ jobs:
 
       - name: Force Custom Direct Compile
         run: |
-          # 1. Define variables manually to ignore Makefile errors
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # 2. Compile main.cpp directly into a Switch Aarch64 binary ELF object
+          # 1. Compile source into an ARM64 object file
           aarch64-none-elf-g++ -O2 -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c main.cpp -o main.o
           
-          # 3. Link the binary to the core libnx Switch system definitions
-          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs main.o -L$DEVKITPRO/libnx/lib -lnx -o SwitchLauncher.elf
+          # 2. Link object to libnx
+          aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -Wl,-z,text main.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
           
-          # 4. Convert the ELF payload into a native executable Switch .nro file
-          elf2nro SwitchLauncher.elf SwitchLauncher.nro --title="Custom Boot Menu" --author="Homebrew Dev" --version="1.0.0"
+          # 3. Package everything into the final Switch app bundle renamed to Launcher-NX
+          elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Compiled NRO Binary
         uses: actions/upload-artifact@v4
         with:
-          name: SwitchLauncherApp
+          name: Launcher-NX-App
           path: ./*.nro
